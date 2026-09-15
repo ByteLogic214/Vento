@@ -1,0 +1,19 @@
+{
+  "apiRoute": {
+    "method": "POST",
+    "path": "montecarlo/matches/daily"
+  },
+  "boardAction": true,
+  "boardOutput": true,
+  "description": "Consulta TheStatsAPI y devuelve los partidos programados, normalizados para selectores de Vento.",
+  "displayButton": true,
+  "displayResponse": true,
+  "html": "//@card/react\n\nfunction Widget(card) {\n  const value = card.value;\n\n  const content = <YStack f={1} ai=\"center\" jc=\"center\" width=\"100%\">\n      {card.icon && card.displayIcon !== false && (\n          <Icon name={card.icon} size={48} color={card.color}/>\n      )}\n      {card.displayResponse !== false && (\n          <CardValue mode={card.markdownDisplay ? 'markdown' : card.htmlDisplay ? 'html' : 'normal'} value={value ?? \"N/A\"} />\n      )}\n  </YStack>\n\n  return (\n      <Tinted>\n        <ProtoThemeProvider forcedTheme={window.TamaguiTheme}>\n          <ActionCard data={card}>\n            {card.displayButton !== false ? <ParamsForm data={card}>{content}</ParamsForm> : card.displayResponse !== false && content}\n          </ActionCard>\n        </ProtoThemeProvider>\n      </Tinted>\n  );\n}\n",
+  "label": "Partidos del día",
+  "name": "seleccionar_partidos_diarios",
+  "params": {
+    "date": "Fecha ISO YYYY-MM-DD; por defecto, hoy UTC"
+  },
+  "rulesCode": "const apiKey = await context.keys.getKey({ key: 'STATS_API_KEY' });\nif (!apiKey) throw new Error('STATS_API_KEY no está configurada en Vento Keys.');\n\nconst requestedDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(String(params.date || ''))\n  ? String(params.date)\n  : new Date().toISOString().slice(0, 10);\n\n// v2 avoids a previous cache created with the obsolete `date` query parameter.\nconst cacheKey = `montecarlo:daily-fixtures:v3:${requestedDate}`;\nconst now = Date.now();\nconst ttlMs = 20 * 60 * 1000;\nconst cached = await context.boards.getVar(cacheKey);\nif (cached?.expires_at_ms > now && Array.isArray(cached.data)) return cached.data;\n\nconst response = await fetch(\n  `https://api.thestatsapi.com/api/football/matches?date_from=${encodeURIComponent(requestedDate)}&date_to=${encodeURIComponent(requestedDate)}&per_page=100&utc_offset=%2B00%3A00`,\n  { headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' } }\n);\nif (!response.ok) throw new Error(`TheStatsAPI respondió HTTP ${response.status}`);\n\nconst payload = await response.json();\nconst records = Array.isArray(payload) ? payload : (payload?.data || payload?.matches || []);\nconst value = records\n  .filter((match) => String(match?.utc_date || '').slice(0, 10) === requestedDate)\n  .map((match) => ({\n    match_id: match?.id ?? match?.match_id ?? null,\n    campeonato: match?.competition?.name ?? match?.competition_name ?? match?.competition ?? match?.competition_id ?? 'Competición no publicada',\n    local: match?.home_team?.name ?? match?.home?.name ?? null,\n    visitante: match?.away_team?.name ?? match?.away?.name ?? null,\n    hora: match?.utc_date ?? match?.kickoff_utc ?? match?.kickoff ?? null\n  }))\n  .filter((match) => match.match_id !== null)\n  .map((match) => ({ ...match, match_id: String(match.match_id) }));\n\nawait context.boards.setVar(cacheKey, { expires_at_ms: now + ttlMs, data: value });\nreturn value;\n",
+  "type": "action"
+}

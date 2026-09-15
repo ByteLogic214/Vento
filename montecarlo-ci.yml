@@ -1,0 +1,85 @@
+name: Montecarlo CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      check_api:
+        description: Verificar STATS_API_KEY con una petición real
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Validar archivos obligatorios
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s pages/montecarlo_flashscore.html
+          test -s pages/montecarlo_partido.html
+          test -s vento/node/ui.jsx
+          test -s manifest.json
+          find vento/actions -name '*.json' -print0 | xargs -0 -n1 jq empty
+          grep -qi '<!doctype html>' pages/montecarlo_flashscore.html
+          grep -qi '<!doctype html>' pages/montecarlo_partido.html
+
+      - name: Validar JavaScript de acciones Vento
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+          for (const file of fs.readdirSync('vento/actions').filter(name => name.endsWith('.js'))) {
+            const source = fs.readFileSync(path.join('vento/actions', file), 'utf8');
+            new AsyncFunction('params', 'context', source);
+            console.log(`OK ${file}`);
+          }
+          NODE
+
+      - name: Crear ZIP del código
+        shell: bash
+        run: |
+          zip -qr montecarlo-source.zip . -x '.git/*' '*.zip'
+
+      - name: Publicar artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: montecarlo-source
+          path: montecarlo-source.zip
+          if-no-files-found: error
+
+  api-smoke:
+    if: github.event_name == 'workflow_dispatch' && inputs.check_api
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comprobar secreto y acceso a TheStatsAPI
+        env:
+          STATS_API_KEY: ${{ secrets.STATS_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${STATS_API_KEY:-}" ]; then
+            echo 'Falta el secreto STATS_API_KEY en GitHub.' >&2
+            exit 1
+          fi
+          http_code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${STATS_API_KEY}" \
+            --header 'Accept: application/json' \
+            'https://api.thestatsapi.com/api/football/matches?per_page=1')"
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "TheStatsAPI respondió HTTP $http_code" >&2
+            exit 1
+          fi
+          echo "TheStatsAPI respondió HTTP $http_code."
+
