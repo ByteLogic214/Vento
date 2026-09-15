@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Montecarlo · Próximos partidos</title>
+  <style>
+    :root{--navy:#071b32;--navy2:#09213c;--red:#ff0046;--line:#e2e8ee;--ink:#1b334d;--muted:#71869c;--bg:#f3f5f7}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px Arial,Helvetica,sans-serif}.top{height:58px;background:var(--navy);color:#fff;display:flex;align-items:center;padding:0 max(18px,calc((100% - 1240px)/2));gap:26px}.brand{font-size:20px;font-weight:800;letter-spacing:-.6px}.brand b{color:var(--red)}.tag{color:#c4d0dc;font-size:12px}.shell{max-width:1240px;margin:22px auto;display:grid;grid-template-columns:220px minmax(0,1fr) 300px;gap:16px;padding:0 14px}.panel,.side{background:#fff;border:1px solid var(--line);border-radius:6px}.side h3,.right-title{font-size:12px;margin:0;padding:14px;color:#60758d;border-bottom:1px solid var(--line);letter-spacing:.3px}.league-list{padding:6px}.league{width:100%;border:0;background:transparent;text-align:left;padding:10px;border-radius:4px;color:#354d68;font-weight:600;cursor:pointer}.league:hover,.league.active{background:#edf2f7;color:#071b32}.league span{float:right;color:#8ba0b6;font-size:11px}.head{display:flex;align-items:center;gap:10px;margin:0 0 12px}.head h1{font-size:20px;margin:0}.day{margin-left:auto;background:#fff;border:1px solid var(--line);border-radius:5px;display:flex;align-items:center}.day button{border:0;background:transparent;color:#45617d;padding:10px 13px;cursor:pointer}.day strong{font-size:12px;white-space:nowrap}.notice{background:#e9f3ff;border:1px solid #cce3fb;color:#2c5d8d;padding:10px 12px;border-radius:5px;margin-bottom:12px;font-size:12px}.comp{margin-bottom:12px}.comp-title{height:38px;background:var(--navy2);color:#fff;padding:0 13px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:bold;border-radius:5px 5px 0 0}.count{margin-left:auto;color:#a7bfd5;font-size:11px}.match{width:100%;display:grid;grid-template-columns:64px 1fr 26px;gap:9px;align-items:center;background:#fff;border:1px solid var(--line);border-top:0;padding:10px 12px;text-align:left;color:var(--ink);cursor:pointer}.match:hover,.match.selected{background:#f5f9fc}.match.selected{border-left:3px solid var(--red);padding-left:9px}.time{font-size:12px;font-weight:bold}.teams{font-weight:600;line-height:20px}.star{color:#b2c0ce;font-size:18px}.prediction{padding:15px}.fixture{font-size:15px;font-weight:bold;margin-bottom:5px}.kickoff{font-size:11px;color:var(--muted);margin-bottom:15px}.bars{display:grid;gap:9px}.bar{display:grid;grid-template-columns:37px 1fr 48px;gap:7px;align-items:center;font-size:12px}.track{height:8px;background:#e9eef3;border-radius:9px;overflow:hidden}.fill{height:100%;background:#1e5b91;border-radius:9px}.bar:nth-child(2) .fill{background:#7289a1}.bar:nth-child(3) .fill{background:#f05b74}.metric-title{font-size:11px;color:var(--muted);margin:18px 0 7px;text-transform:uppercase;font-weight:bold}.odds{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.odd{padding:7px 3px;background:#f3f6f8;border-radius:4px;text-align:center;font-size:11px}.odd b{display:block;font-size:14px;color:#183651}.status{border-top:1px solid var(--line);margin-top:14px;padding-top:10px;color:var(--muted);font-size:11px;line-height:1.45}.empty{padding:15px;color:var(--muted);font-size:12px;line-height:1.5}.spin{display:inline-block;width:12px;height:12px;border:2px solid #b6c5d3;border-top-color:var(--red);border-radius:50%;animation:r 1s linear infinite;vertical-align:-2px}@keyframes r{to{transform:rotate(360deg)}}@media(max-width:900px){.shell{grid-template-columns:1fr}.side{display:none}.top{padding:0 12px}.tag{margin-left:auto}}@media(max-width:560px){.shell{padding:0 8px;margin-top:12px}.match{grid-template-columns:54px 1fr 20px}.head h1{font-size:17px}}
+  </style>
+</head>
+<body>
+  <header class="top"><div class="brand">MONTE<b>CARLO</b></div><div class="tag">Predicción de próximos partidos · datos publicados</div></header>
+  <main class="shell">
+    <aside class="side"><h3>COMPETICIONES</h3><div class="league-list" id="leagueList"><div class="empty">Cargando ligas…</div></div></aside>
+    <section><div class="head"><h1>Próximos partidos</h1><div class="day"><button id="prev" aria-label="Día anterior">‹</button><strong id="dateLabel"></strong><button id="next" aria-label="Día siguiente">›</button></div></div><div class="notice" id="notice">Cargando calendario…</div><div id="matches"></div></section>
+    <aside class="panel"><h3 class="right-title">PROYECCIÓN PREPARTIDO</h3><div id="prediction" class="empty">Selecciona un próximo partido. La proyección usa únicamente cuotas prepartido publicadas por TheStatsAPI.</div></aside>
+  </main>
+<script>
+const NETWORK=location.pathname.split('/')[2],BOARD='montecarlo_orchestrator';
+const state={date:new Date(),matches:[],league:'__all',selected:null};const $=id=>document.getElementById(id);const dateKey=d=>d.toISOString().slice(0,10);const esc=x=>String(x??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+function api(path,opts={}){return fetch(`/api/core/v1/networks/${encodeURIComponent(NETWORK)}${path}`,{credentials:'include',headers:{'Content-Type':'application/json'},...opts}).then(async r=>{const d=await r.json().catch(()=>null);if(r.status===401||r.status===403){location.href='/workspace/auth/login?return='+encodeURIComponent(location.pathname);throw Error('Sesión requerida')}if(!r.ok)throw Error(d?.error||'Error de conexión');return d})}function action(name,params){return api(`/boards/${encodeURIComponent(BOARD)}/actions/${encodeURIComponent(name)}`,{method:'POST',body:JSON.stringify(params)})}function rows(p){return Array.isArray(p)?p:(p?.data||p?.result||p?.value||[])}function comp(m){return m.campeonato||'Competición no publicada'}function home(m){return m.local||'Local no publicado'}function away(m){return m.visitante||'Visitante no publicado'}function kickoff(m){return m.hora||null}function dateLabel(){return new Intl.DateTimeFormat('es-ES',{weekday:'short',day:'2-digit',month:'short'}).format(state.date).toUpperCase()}
+function render(){const leagues=[...new Set(state.matches.map(comp))];$('dateLabel').textContent=dateLabel();$('leagueList').innerHTML=`<button class="league ${state.league==='__all'?'active':''}" data-l="__all">Todas <span>${state.matches.length}</span></button>`+leagues.map(l=>`<button class="league ${state.league===l?'active':''}" data-l="${esc(l)}">⚽ ${esc(l)} <span>${state.matches.filter(m=>comp(m)===l).length}</span></button>`).join('');document.querySelectorAll('.league').forEach(b=>b.onclick=()=>{state.league=b.dataset.l;render()});const groups={};state.matches.filter(m=>state.league==='__all'||comp(m)===state.league).forEach(m=>(groups[comp(m)]??=[]).push(m));$('matches').innerHTML=Object.keys(groups).length?Object.entries(groups).map(([league,ms])=>`<div class="comp"><div class="comp-title">⚽ ${esc(league)} <span class="count">${ms.length} PRÓXIMOS</span></div>${ms.map(m=>`<button class="match ${state.selected===String(m.match_id)?'selected':''}" data-id="${esc(m.match_id)}"><span class="time">${esc(new Date(kickoff(m)).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',timeZone:'UTC'}))}</span><span class="teams">${esc(home(m))}<br>${esc(away(m))}</span><span class="star">☆</span></button>`).join('')}</div>`).join(''):'<div class="panel empty">No hay próximos partidos publicados para este día.</div>';document.querySelectorAll('.match').forEach(b=>b.onclick=()=>selectMatch(b.dataset.id))}
+async function load(){state.selected=null;$('prediction').className='empty';$('prediction').textContent='Cargando los próximos encuentros…';$('notice').textContent='Consultando calendario real de TheStatsAPI…';try{const now=Date.now();state.matches=rows(await action('seleccionar_partidos_diarios',{date:dateKey(state.date)})).filter(m=>Date.parse(kickoff(m))>=now).sort((a,b)=>Date.parse(kickoff(a))-Date.parse(kickoff(b)));$('notice').textContent=state.matches.length?`${state.matches.length} próximos partidos · ordenados por hora de inicio, no por popularidad.`:'No hay próximos partidos publicados para esta fecha.';render();if(state.matches[0])selectMatch(String(state.matches[0].match_id))}catch(e){$('notice').textContent='No se pudo cargar el calendario: '+e.message;$('leagueList').innerHTML='<div class="empty">Calendario no disponible</div>'}}
+const pct=v=>v==null?'—':`${Number(v).toFixed(2)}%`;function bar(label,value){const width=value==null?0:Math.max(0,Math.min(100,Number(value)));return `<div class="bar"><span>${label}</span><div class="track"><div class="fill" style="width:${width}%"></div></div><b>${pct(value)}</b></div>`}
+async function selectMatch(id){state.selected=id;render();const m=state.matches.find(x=>String(x.match_id)===id);$('prediction').className='prediction';$('prediction').innerHTML=`<div class="fixture">${esc(home(m))} — ${esc(away(m))}</div><div class="kickoff">${esc(new Date(kickoff(m)).toLocaleString('es-ES',{timeZone:'UTC'}))} UTC</div><div class="status"><span class="spin"></span> Calculando proyección desde cuotas reales…</div>`;try{const p=await action('proyectar_partido',{match_id:id});const data=p?.data||p?.result||p;if(!data?.available){$('prediction').innerHTML=`<div class="fixture">${esc(home(m))} — ${esc(away(m))}</div><div class="empty">${esc(data?.reason||'No hay cuotas prepartido publicadas todavía. No se muestra una predicción sin datos reales.')}</div>`;return}const x=data.market_1x2_percent||{},o=data.odds_1x2||{};$('prediction').innerHTML=`<div class="fixture">${esc(home(m))} — ${esc(away(m))}</div><div class="kickoff">${esc(new Date(kickoff(m)).toLocaleString('es-ES',{timeZone:'UTC'}))} UTC</div><div class="bars">${bar('1',x.home)}${bar('X',x.draw)}${bar('2',x.away)}</div><div class="metric-title">Cuotas 1X2 publicadas</div><div class="odds"><div class="odd">Local<b>${o.home??'—'}</b></div><div class="odd">Empate<b>${o.draw??'—'}</b></div><div class="odd">Visita<b>${o.away??'—'}</b></div></div><div class="status">${esc(data.source)}${data.bookmaker?` · ${esc(data.bookmaker)}`:''}<br>Probabilidades implícitas normalizadas. No se usan datos ficticios. ${data.cache?.hit?'Resultado en caché.':'Consulta reciente.'}</div>`}catch(e){$('prediction').innerHTML=`<div class="empty">No se pudo obtener la proyección: ${esc(e.message)}</div>`}}
+$('prev').onclick=()=>{state.date.setUTCDate(state.date.getUTCDate()-1);load()};$('next').onclick=()=>{state.date.setUTCDate(state.date.getUTCDate()+1);load()};load();
+</script>
+<script>
+(() => {
+  const val = v => {
+    const x = Number(v);
+    return Number.isFinite(x) ? x : null;
+  };
+  const fmt = v => v == null ? "—" : Number(v).toFixed(2);
+  const implied = odds => {
+    const entries = Object.entries(odds || {})
+      .map(([key, quote]) => [key, val(quote?.last_seen ?? quote)])
+      .filter(([, quote]) => quote && quote > 0);
+    const total = entries.reduce((sum, [, quote]) => sum + 1 / quote, 0);
+    return Object.fromEntries(entries.map(([key, quote]) => [key, 100 / (quote * total)]));
+  };
+  const market = (features, key) => features?.market?.bookmakers?.[0]?.markets?.[key] || {};
+  const bar = (label, probability) => {
+    const width = probability == null ? 0 : Math.max(0, Math.min(100, probability));
+    const text = probability == null ? "—" : Number(probability).toFixed(2) + "%";
+    return "<div class=\"bar\"><span>" + label + "</span><div class=\"track\"><div class=\"fill\" style=\"width:" + width + "%\"></div></div><b>" + text + "</b></div>";
+  };
+  const trio = (title, values) =>
+    "<div class=\"metric-title\">" + title + "</div><div class=\"odds\">" +
+    values.map(([label, value]) => "<div class=\"odd\">" + label + "<b>" + fmt(value) + "</b></div>").join("") +
+    "</div>";
+
+  async function showFullPrediction(matchId, button) {
+    const teams = button.querySelector(".teams")?.innerHTML || "Partido";
+    const target = document.getElementById("prediction");
+    target.className = "prediction";
+    target.innerHTML = "<div class=\"fixture\">" + teams + "</div><div class=\"status\"><span class=\"spin\"></span> Cargando ficha de datos reales…</div>";
+    try {
+      const [projectionRaw, featuresRaw] = await Promise.all([
+        action("proyectar_partido", { match_id: matchId }),
+        action("obtener_datos_partido", { match_id: matchId })
+      ]);
+      const projection = projectionRaw?.data || projectionRaw?.result || projectionRaw || {};
+      const features = featuresRaw?.data || featuresRaw?.result || featuresRaw || {};
+      const oneXTwo = projection.market_1x2_percent || {};
+      const overUnder = implied(market(features, "total_goals")["2.5"]);
+      const scores = Object.entries(implied(market(features, "correct_score")))
+        .sort((a, b) => b[1] - a[1]).slice(0, 3);
+      const home = features.match?.home || {};
+      const away = features.match?.away || {};
+      const lineValues = side => [
+        ["DEF", side.line_strength?.defense?.xg_avg],
+        ["MED", side.line_strength?.midfield?.xg_avg],
+        ["ATA", side.line_strength?.attack?.xg_avg]
+      ];
+      const formValues = side => [
+        ["GF", side.recent_form?.goals_scored_avg],
+        ["GC", side.recent_form?.goals_conceded_avg],
+        ["xG", side.recent_form?.xg_avg]
+      ];
+      const xgReady = home.recent_form?.xg_avg != null && away.recent_form?.xg_avg != null;
+      target.innerHTML =
+        "<div class=\"fixture\">" + teams + "</div>" +
+        "<div class=\"metric-title\">Probabilidad de mercado 1X2</div><div class=\"bars\">" +
+        bar("1", oneXTwo.home) + bar("X", oneXTwo.draw) + bar("2", oneXTwo.away) + "</div>" +
+        "<div class=\"metric-title\">Over / Under 2.5 · mercado</div><div class=\"bars\">" +
+        bar("Over", overUnder.over) + bar("Under", overUnder.under) + "</div>" +
+        "<div class=\"metric-title\">Marcadores más valorados por el mercado</div><div class=\"odds\">" +
+        (scores.length ? scores.map(([score, probability]) =>
+          "<div class=\"odd\">" + esc(score) + "<b>" + probability.toFixed(2) + "%</b></div>").join("") :
+          "<div class=\"empty\">No publicado</div>") + "</div>" +
+        trio("Forma reciente · " + esc(home.name || "Local"), formValues(home)) +
+        trio("Forma reciente · " + esc(away.name || "Visitante"), formValues(away)) +
+        trio("xG por líneas · " + esc(home.name || "Local"), lineValues(home)) +
+        trio("xG por líneas · " + esc(away.name || "Visitante"), lineValues(away)) +
+        "<div class=\"metric-title\">Modelo Montecarlo</div><div class=\"status\">" +
+        (xgReady
+          ? "xG disponible; la ejecución vectorizada de 1.000.000 escenarios requiere un Runner Python/NumPy, no disponible en esta red."
+          : "λ, simulación y +EV: no calculables. TheStatsAPI aún no publicó xG suficiente y/o alineaciones para este partido.") +
+        "<br>Cuotas " + (features.availability?.odds_published ? "publicadas" : "no publicadas") +
+        " · alineaciones " + (features.availability?.lineups_published ? "publicadas" : "no publicadas") +
+        " · " + esc(projection.source || "TheStatsAPI") + ".</div>";
+    } catch (error) {
+      target.innerHTML = "<div class=\"empty\">No se pudo obtener la ficha: " + esc(error.message) + "</div>";
+    }
+  }
+
+  document.addEventListener("click", event => {
+    const button = event.target.closest(".match");
+    if (!button) return;
+    event.stopImmediatePropagation();
+    window.open(`montecarlo_partido.html?match_id=${encodeURIComponent(button.dataset.id)}`, "_blank", "noopener");
+  }, true);
+  let attempts = 0;
+  const initialPrediction = () => {
+    const first = document.querySelector(".match");
+    if (first) return showFullPrediction(first.dataset.id, first);
+    if (++attempts < 16) setTimeout(initialPrediction, 500);
+  };
+  setTimeout(initialPrediction, 500);
+})();
+</script>
+</body></html>
+
